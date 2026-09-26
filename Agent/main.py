@@ -20,13 +20,14 @@ model = "openai/gpt-oss-20b"
 
 # ==================== LLM CALL FUCTION ===========================================================================
 def call_model(messages):
-    responses = client.chat.completions.create(
-        model=model,  
-        messages=messages,
-        tools=tools,
-        tool_choice="auto",
-        temperature=0.7,
-    )
+    with console.status("[dim]Thinking...[/dim]", spinner="dots", spinner_style="dim"):
+        responses = client.chat.completions.create(
+            model=model,  
+            messages=messages,
+            tools=tools,
+            tool_choice="auto",
+            temperature=0.7,
+        )
 # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>  SYSTEM : MODEL RESPONSE  <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 #    console.print(Panel(f"[white dim]{responses}[/white dim]", title="[bold white]LLM RESPONSE[/bold white]", title_align="center", border_style="white dim"))
 
@@ -88,26 +89,34 @@ completion_tokens_used = 0
 def main():
     global total_tokens_used, prompt_tokens_used, completion_tokens_used
     while True:
-        print("\n")
+        #print("\n")
         user_input = Prompt.ask("[bold white]YOU[/bold white]")
 
-        if user_input.lower() in ["/bye", "/exit", "/cls"]:
-            console.print(f"[bold yellow]See you later![/bold yellow]")
-            break
+        if user_input.startswith("/"):
+            if user_input.lower() in ["/bye", "/exit", "/cls"]:
+                console.print(f"[bold yellow]See you later![/bold yellow]")
+                break
+            
+            if user_input == "/clear":
+                from memory import mem_clear
+                mem_clean=mem_clear()
+                console.print(f"[bold yellow]{mem_clean}[/bold yellow]")
+                continue
 
-        if not user_input.strip():
-            console.print(f"[bold yellow]Ask Anything..[/bold yellow]")
-            continue
-
+            if not user_input.strip():
+                console.print(f"[bold yellow]Ask Anything..[/bold yellow]")
+                continue
+        
         conversations.append({"role": "user", "content": user_input})
-        with console.status("[dim]Thinking...[/dim]", spinner="dots", spinner_style="dim"):
-            model_response = call_model(messages=conversations)
+        #with console.status("[dim]Thinking...[/dim]", spinner="dots", spinner_style="dim"):
+        model_response = call_model(messages=conversations)
         # ------------------ APPEND TOKENS DETAILS ---------------------------------
-            total_tokens_used += model_response.usage.total_tokens
-            prompt_tokens_used += model_response.usage.prompt_tokens 
-            completion_tokens_used += model_response.usage.completion_tokens
+        total_tokens_used += model_response.usage.total_tokens
+        prompt_tokens_used += model_response.usage.prompt_tokens 
+        completion_tokens_used += model_response.usage.completion_tokens
         # --------------------------------------------------------------------------
         current_response = model_response.choices[0].message
+
  # ========================== TOOL CALL ACTIONS ========================================================================================================
         while current_response.tool_calls:
             conversations.append(current_response)
@@ -119,18 +128,19 @@ def main():
                 tool_args = {k: v for k, v in tool_args.items() if k != ""}
 
                 if tool_to_call:
-                    try:
-                        tool_output = (tool_to_call(**tool_args)if tool_args else tool_to_call())
-                    except TypeError:
-                        tool_output = tool_to_call()
+                    with console.status(f"[dim]{tool_name} tool Calling...[/dim]", spinner="dots", spinner_style="dim"):
+                        try:
+                            tool_output = (tool_to_call(**tool_args)if tool_args else tool_to_call())
+                        except TypeError:
+                            tool_output = tool_to_call()
  # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>  SYSTEM : TOOL OUPUT  <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-                    console.print(Panel(f"[white dim]Argument: {tool_args}\nOutput: {tool_output}[/white dim]", title="[bold white]TOOL RESPONSE[/bold white]", title_align="center", border_style="white dim"))
+                      #  console.print(Panel(f"[white dim]Argument: {tool_args}\nOutput: {tool_output}[/white dim]", title="[bold white]TOOL RESPONSE[/bold white]", title_align="center", border_style="white dim"))
  # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>><<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-                    conversations.append({
-                        "role": "tool",
-                        "tool_call_id": tool_call.id,
-                        "content": str(tool_output),
-                    })
+                        conversations.append({
+                            "role": "tool",
+                            "tool_call_id": tool_call.id,
+                            "content": str(tool_output),
+                        })
 
             model_response = call_model(messages=conversations)
         # ------------------ APPEND TOKENS DETAILS ---------------------------------
