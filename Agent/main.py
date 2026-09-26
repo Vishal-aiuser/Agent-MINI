@@ -16,8 +16,6 @@ from rich.align import Align
 load_dotenv()
 console = Console()
 client = Groq()
-
-border = "- - "
 model = "openai/gpt-oss-20b"
 
 # ==================== LLM CALL FUCTION ===========================================================================
@@ -84,6 +82,7 @@ console.print(Panel(Align.center(hero_screen), expand=True, border_style="bold c
 # ==================================================================================================================
 def main():
     while True:
+        print("\n")
         user_input = Prompt.ask("[bold white]YOU[/bold white]")
 
         if user_input.lower() in ["/bye", "/exit", "/cls"]:
@@ -91,7 +90,7 @@ def main():
             break
 
         if not user_input.strip():
-            console.print(f"[bold yellow]Ask Anything..[/bold yellow]\n")
+            console.print(f"[bold yellow]Ask Anything..[/bold yellow]")
             continue
 
         conversations.append({"role": "user", "content": user_input})
@@ -135,7 +134,6 @@ def main():
                 border_style="cyan",
             )
         )
-        console.print(f"[dim]{border*22}[/dim]")
         conversations.append(current_response)
 # ===================================================================================================================================
 if __name__ == "__main__":
