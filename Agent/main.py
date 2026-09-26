@@ -29,7 +29,7 @@ def call_model(messages):
             temperature=0.7,
         )
 # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>  SYSTEM : MODEL RESPONSE  <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-#    console.print(Panel(f"[white dim]{responses}[/white dim]", title="[bold white]LLM RESPONSE[/bold white]", title_align="center", border_style="white dim"))
+    console.print(Panel(f"[white dim]{responses}[/white dim]", title="[bold white]LLM RESPONSE[/bold white]", title_align="center", border_style="white dim"))
 
     return responses
 # ==================================================================================================================
@@ -114,6 +114,7 @@ def main():
         total_tokens_used += model_response.usage.total_tokens
         prompt_tokens_used += model_response.usage.prompt_tokens 
         completion_tokens_used += model_response.usage.completion_tokens
+        active_model=model_response.model
         # --------------------------------------------------------------------------
         current_response = model_response.choices[0].message
 
@@ -147,11 +148,12 @@ def main():
             total_tokens_used += model_response.usage.total_tokens
             prompt_tokens_used += model_response.usage.prompt_tokens 
             completion_tokens_used += model_response.usage.completion_tokens
+            active_model=model_response.model
         # --------------------------------------------------------------------------
             current_response = model_response.choices[0].message
 
 # =================== AGENT's FINAL RESPONSE =====================================================================
-        sub_details=f"[white]Total Tokens Used:[/white] {total_tokens_used} [white]| Active Model:[/white] {model}"
+        sub_details=f"[white]Total Tokens Used:[/white] {total_tokens_used} [white]| Active Model:[/white] {active_model}"
         final_response = current_response.content or ""
         console.print(
             Panel(
