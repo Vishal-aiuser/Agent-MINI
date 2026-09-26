@@ -1,0 +1,22 @@
+[project]
+name = "agent-mini"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Vishal", email = "vishaltech6125@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "ddgs>=9.16.0",
+    "groq>=1.7.0",
+    "python-dotenv>=1.2.3",
+    "rich>=15.0.0",
+]
+
+[project.scripts]
+agent-mini = "agent_mini:main"
+
+[build-system]
+requires = ["uv_build>=0.12.1,<0.13.0"]
+build-backend = "uv_build"
