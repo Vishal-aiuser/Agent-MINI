@@ -28,7 +28,7 @@ def call_model(messages):
         temperature=0.7,
     )
 # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>  SYSTEM : MODEL RESPONSE  <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-    console.print(Panel(f"[white dim]{responses}[/white dim]", title="[bold white]LLM RESPONSE[/bold white]", title_align="center", border_style="white dim"))
+#    console.print(Panel(f"[white dim]{responses}[/white dim]", title="[bold white]LLM RESPONSE[/bold white]", title_align="center", border_style="white dim"))
 
     return responses
 # ==================================================================================================================
@@ -77,10 +77,16 @@ Type '[yellow]/bye[/yellow]' or '[yellow]/exit[/yellow]' to end this conversatio
 console.print(Panel(Align.center(hero_screen), expand=True, border_style="bold cyan"))
 # =================================================================================================================
 
+# ============================== SESSION TOKEN DETAILS ============================================================
+total_tokens_used = 0
+prompt_tokens_used = 0
+completion_tokens_used = 0
+# =================================================================================================================
 
 
 # ==================================================================================================================
 def main():
+    global total_tokens_used, prompt_tokens_used, completion_tokens_used
     while True:
         print("\n")
         user_input = Prompt.ask("[bold white]YOU[/bold white]")
@@ -96,6 +102,11 @@ def main():
         conversations.append({"role": "user", "content": user_input})
         with console.status("[dim]Thinking...[/dim]", spinner="dots", spinner_style="dim"):
             model_response = call_model(messages=conversations)
+        # ------------------ APPEND TOKENS DETAILS ---------------------------------
+            total_tokens_used += model_response.usage.total_tokens
+            prompt_tokens_used += model_response.usage.prompt_tokens 
+            completion_tokens_used += model_response.usage.completion_tokens
+        # --------------------------------------------------------------------------
         current_response = model_response.choices[0].message
  # ========================== TOOL CALL ACTIONS ========================================================================================================
         while current_response.tool_calls:
@@ -122,16 +133,24 @@ def main():
                     })
 
             model_response = call_model(messages=conversations)
+        # ------------------ APPEND TOKENS DETAILS ---------------------------------
+            total_tokens_used += model_response.usage.total_tokens
+            prompt_tokens_used += model_response.usage.prompt_tokens 
+            completion_tokens_used += model_response.usage.completion_tokens
+        # --------------------------------------------------------------------------
             current_response = model_response.choices[0].message
 
-# =================== AGENT FINAL RESPONSE =====================================================================
+# =================== AGENT's FINAL RESPONSE =====================================================================
+        sub_details=f"[white]Total Tokens Used:[/white] {total_tokens_used} [white]| Active Model:[/white] {model}"
         final_response = current_response.content or ""
         console.print(
             Panel(
                 Markdown(final_response),
                 title="[bold yellow]MINI[/bold yellow]",
+                subtitle=f"[yellow dim]{sub_details}[/yellow dim]",
                 title_align="left",
-                border_style="cyan",
+                subtitle_align="right",
+                border_style="cyan"
             )
         )
         conversations.append(current_response)
