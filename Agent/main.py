@@ -1,8 +1,8 @@
 
 import os
 import json
+from openai import OpenAI
 from dotenv import load_dotenv
-from groq import Groq
 from memory import conversations
 from tools import available_tools, tools
 
@@ -12,13 +12,17 @@ from rich.panel import Panel
 from rich.prompt import Prompt
 from rich.align import Align 
 
-
-load_dotenv()
 console = Console()
-client = Groq()
-model = "openai/gpt-oss-20b"
+load_dotenv()
+base_url = os.getenv("GROQ_BASE_URL")
+api_key = os.getenv("GROQ_API_KEY")
+
+client = OpenAI(base_url = base_url, api_key = api_key)
+
+model = "openai/gpt-oss-120b"
 
 # ==================== LLM CALL FUCTION ===========================================================================
+
 def call_model(messages):
     with console.status("[dim]Thinking...[/dim]", spinner="dots", spinner_style="dim"):
         responses = client.chat.completions.create(
@@ -38,7 +42,7 @@ def call_model(messages):
 # ============== HEALTH CHECK FUNCTION ============================================================================
 def health_check():
     # API KEY CHECK
-    api_key_ok = bool(os.getenv("GROQ_API_KEY"))
+    api_key_ok = bool(api_key)
     api_status = "[bold green]Configured[/bold green]" if api_key_ok else "[bold red]Missing[bold red]"
 
     # MODEL NAME
@@ -103,12 +107,11 @@ def main():
                 console.print(f"[bold yellow]{mem_clean}[/bold yellow]")
                 continue
 
-            if not user_input.strip():
-                console.print(f"[bold yellow]Ask Anything..[/bold yellow]")
-                continue
+        if not user_input.strip():
+            console.print(f"[bold yellow]Ask Anything..[/bold yellow]")
+            continue
         
         conversations.append({"role": "user", "content": user_input})
-        #with console.status("[dim]Thinking...[/dim]", spinner="dots", spinner_style="dim"):
         model_response = call_model(messages=conversations)
         # ------------------ APPEND TOKENS DETAILS ---------------------------------
         total_tokens_used += model_response.usage.total_tokens
@@ -135,7 +138,7 @@ def main():
                         except TypeError:
                             tool_output = tool_to_call()
  # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>  SYSTEM : TOOL OUPUT  <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-                      #  console.print(Panel(f"[white dim]Argument: {tool_args}\nOutput: {tool_output}[/white dim]", title="[bold white]TOOL RESPONSE[/bold white]", title_align="center", border_style="white dim"))
+                        console.print(Panel(f"[white dim]Tool Name: {tool_name}\nArgument: {tool_args}\nOutput: {tool_output}[/white dim]", title="[bold white]TOOL RESPONSE[/bold white]", title_align="center", border_style="white dim"))
  # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>><<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
                         conversations.append({
                             "role": "tool",

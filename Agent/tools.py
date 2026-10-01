@@ -2,6 +2,7 @@
 import os 
 import sys
 import datetime
+import subprocess
 from ddgs import DDGS 
 
 #=====================================================
@@ -47,7 +48,81 @@ def list_files(directory="."):
     except Exception as e:
         return f"Error lsting directory: {str(e)}"
 
-# 6.
+# 6. Create Creator
+def create_folder(folder_path):
+    try:
+        os.makedirs(folder_path, exist_ok=True)
+        return f"Successfully created folder: {folder_path}"
+    except Exception as e:
+        return f"Error creating folder: {str(e)}"
+
+# 7. Python code Runner
+def run_python_code(code):
+    try:
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        output = result.stdout
+        if result.stderr:
+            output += f"\nErrors:\n{result.stderr}"
+        if not output.strip():
+            output = "Code executed successfully with no output."
+        return output
+    except subprocess.TimeoutExpired:
+        return "Error: Code execution timed out (30 seconds limit)."
+    except Exception as e:
+        return f"Error running code: {str(e)}"
+
+# 8. FIND APPLICATION PATH
+def find_application(app_name):
+    app_name_lower = app_name.lower().strip()
+    search_dirs = [
+        os.path.expandvars(r"%APPDATA\Microsoft\Windows\Start menu\Programs"),
+        os.path.expandvars(r"%PROGRAMDATA%\Microsoft\Windows\Start Menu\Programs"),
+        os.path.expandvars(r"~\Desktop"),
+        os.path.expandvars(r"%PUBLIC%\Desktop"),
+        os.path.expandvars(r"%LOCALAPPDATA%\Programs"),
+        os.path.expandvars(r"%ProgramFiles%"),
+        os.path.expandvars(r"%ProgramFiles(x86)%"),
+    ]
+
+    matches = []
+    for base_dir in search_dirs:
+        if not os.path.exists(base_dir):
+            continue
+        for root, dirs, files in os.walk(base_dir):
+            depth = root[len(base_dir):].count(os.sep)
+            if depth > 3:
+                continue
+            for file in files:
+                if file.lower().endswith(('.lnk', '.exe')):
+                    name_without_ext = os.path.splitext(file)[0].lower()
+                    if app_name_lower in name_without_ext:
+                        full_path = os.path.join(root,file)
+                        if full_path not in matches:
+                            matches.append(full_path)
+    if matches:
+        return matches[:5]
+    return f"No installed application found matching '{app_name}'."
+
+
+# 9. LAUNCH APPLICATION BY PATH
+def launch_app_by_path(app_path):
+    try:
+        if not os.path.exists(app_path):
+            return f"Error: File path does not exists: {app_name}"
+        os.startfile(app_path)
+        return f"Successfully launched: {app_path}"
+    except Exception as e:
+        try:
+            subprocess.Popen([app_path], shell=True)
+            return f"Successully launched via fallback: {app_path}"
+        except Exception as err:
+            return f"Error launching application: {str(err)}"
+
 
 
 #=====================================================
@@ -59,6 +134,11 @@ available_tools = {
     "read_file": read_file,
     "write_file": write_file,
     "list_files": list_files,
+    "create_folder":  create_folder,
+    "run_python_code": run_python_code,
+    "find_application": find_application,
+    "launch_app_by_path": launch_app_by_path,
+
 }
 
 
@@ -131,6 +211,62 @@ tools = [
                     "directory": {"type": "string", "description": "Directory path (default is current folder '.')"},
                 },
                 "required": ["directory"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_folder",
+            "description": "Use this tool to create a new folder or directory.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "folder_path": {"type": "string", "description": "path or name of the folder to create."}
+                },
+                "required": ["folder_path"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "run_python_code",
+            "description": "Execute Python code and get the console output or error messages. Use print() in the code to get output.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "code": {"type": "string", "description": "The Python code string to execute."}
+                },
+                "required": ["code"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "find_application",
+            "description": "Search the system for an installed application or shortcut by name and return its exact file paths.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "app_name": {"type": "string", "description": "Name of the application to find (e.g. 'whatsapp', 'chrome', 'free fire', 'vscode')."}
+                },
+                "required": ["app_name"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "launch_app_by_path",
+            "description": "Launch an application using its exact path found from find_application.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "app_path": {"type": "string", "description": "The exact full path of the application executable or shortcut to open."}
+                },
+                "required": ["app_path"]
             }
         }
     }
