@@ -3,6 +3,8 @@ import os
 import sys
 import datetime
 import subprocess
+import httpx
+from bs4 import BeautifulSoup
 from ddgs import DDGS 
 
 #=====================================================
@@ -124,6 +126,29 @@ def launch_app_by_path(app_path):
             return f"Error launching application: {str(err)}"
 
 
+# 10. Web Scraper
+def scrape_webpage(url):
+    try:
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
+        with httpx.Client(headers=headers, timeout=15, follow_redirects=True) as client:
+            response = client.get(url)
+            response.raise_for_status()
+        soup = BeautifulSoup(response.text, "html.parser")
+        # Scripts, styles, nav, footer thevaillaatha elements-ah remove pannuvom
+        for element in soup(["script", "style", "nav", "footer", "header", "noscript"]):
+            element.decompose()
+        # Clean text mattum eduppom
+        text = soup.get_text(separator="\n", strip=True)
+        # Token limit save panna first 4000 characters limit
+        if len(text) > 4000:
+            text = text[:4000] + "\n\n...[Content truncated for token length]..."
+        return text if text else "No readable content found on this webpage."
+    except Exception as e:
+        return f"Error scraping {url}: {str(e)}"
+
+
 
 #=====================================================
 #                 AVAILABLE TOOLS
@@ -138,7 +163,7 @@ available_tools = {
     "run_python_code": run_python_code,
     "find_application": find_application,
     "launch_app_by_path": launch_app_by_path,
-
+    "scrape_webpage": scrape_webpage,
 }
 
 
@@ -269,5 +294,19 @@ tools = [
                 "required": ["app_path"]
             }
         }
-    }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "scrape_webpage",
+            "description": "Scrape and read the full text content from a specific website URL. Use this after web_search to read the actual page content.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {"type": "string", "description": "The full HTTP/HTTPS URL of the website to scrape."}
+                },
+                "required": ["url"]
+            }
+        }
+    },
 ]

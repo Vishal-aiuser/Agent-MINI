@@ -8,8 +8,10 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
+    "beautifulsoup4>=4.15.0",
     "ddgs>=9.16.0",
     "groq>=1.7.0",
+    "httpx>=0.28.1",
     "openai>=3.22.1",
     "python-dotenv>=1.2.3",
     "rich>=15.0.0",
