@@ -19,9 +19,18 @@
 
 ### 1. Prerequisites
 - Python 3.12+
-- A [Groq API Key](https://console.groq.com/keys)
+- A [Groq API Key](https://console.groq.com/keys) `or` [Nvidia NIM API Key](https://build.nvidia.com/settings/api-keys)
 
 ### 2. Installation
+## Method 1 (Recommended):
+Clone the repository and navigate into the folder:
+```bash
+git clone https://github.com/Vishal-aiuser/Agent-MINI.git
+```
+
+Open the cloned folder and double click the `setup.bat` file.
+
+## Method 2:
 
 Clone the repository and navigate into the folder:
 ```bash
