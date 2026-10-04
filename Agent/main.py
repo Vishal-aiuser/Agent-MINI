@@ -122,7 +122,10 @@ def main():
         current_response = model_response.choices[0].message
 
  # ========================== TOOL CALL ACTIONS ========================================================================================================
-        while current_response.tool_calls:
+       # tool_step_count = 0
+      #  max_tool_steps = 4
+        while current_response.tool_calls: #and tool_step_count < max_tool_steps:
+            #tool_step_count += 1
             conversations.append(current_response)
 
             for tool_call in current_response.tool_calls:
@@ -137,6 +140,8 @@ def main():
                             tool_output = (tool_to_call(**tool_args)if tool_args else tool_to_call())
                         except TypeError:
                             tool_output = tool_to_call()
+                        except Exception as e:
+                            tool_output = f"Error executing tool '{tool_name}': {str(e)}"
  # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>  SYSTEM : TOOL OUPUT  <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
                         console.print(Panel(f"[white dim]Tool Name: {tool_name}\nArgument: {tool_args}\nOutput: {tool_output}[/white dim]", title="[bold white]TOOL RESPONSE[/bold white]", title_align="center", border_style="white dim"))
  # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>><<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<

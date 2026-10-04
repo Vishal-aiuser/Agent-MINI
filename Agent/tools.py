@@ -16,15 +16,19 @@ def get_current_time():
 
 # 2. WEB SEARCH
 def web_search(query):
-    data = DDGS().text(query, max_results=3)
-    results = []
-    for r in data:
-        results.append({
-            "title": r.get("title"),
-            "url": r.get("href"),
-            "snippets": r.get("body")
-        }) 
-    return results    
+    try:
+        data = DDGS().text(query, max_results=3)
+        results = []
+        for r in data:
+            results.append({
+                "title": r.get("title"),
+                "url": r.get("href"),
+                "snippets": r.get("body")
+            }) 
+        return results if results else "No results found for this search query."
+    except Exception as e:
+        return f"Search error or no results: {str(e)}"
+         
 
 # 3. FILE READER
 def read_file(filepath):
@@ -149,6 +153,112 @@ def scrape_webpage(url):
         return f"Error scraping {url}: {str(e)}"
 
 
+# 11. TERMINAL / SHELL COMMAND RUNNER
+def run_terminal_cammand(command):
+    try:
+        result = subprocess.run(
+            command,
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=60,
+            errors="replace"
+        )
+        output = result.stdout
+        if result.stderr:
+            output += f"\n[Error / Warnings]:\n{result.stderr}"
+        if not output.strip():
+            output = f"Command executed successfully with no output."
+        return output
+    except subprocess.TimeoutExpired:
+        return "Error: Command execution timed out (60 seconds limit)."
+    except Exception as e:
+        return f"Error executing command: {str(e)}"
+
+
+# 12. SKILL READER
+skills_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "skills")
+def read_skill(skill_name):
+    try:
+        filename = skill_name if skill_name.endswith(".md") else f"{skill_name}.md"
+        filepath = os.path.join(skills_dir, filename)
+
+        if not os.path.exists(filepath):
+            available = [f.replace(".md", "") for f in os.listdir(skills_dir) if f.endswith(".md")]
+            return f"Skill '{skill_name}' not found. Available skills: {available if available else 'None'}"
+        with open(filepath, "r", encoding="utf-8") as f:
+            return f.read()
+    except Exception as e:
+        return f"Error reading skill '{skill_name}': {str(e)}"
+
+
+# 13. PDF CREATOR
+from fpdf import FPDF 
+
+def create_pdf(filepath, content, title="Document"):
+    try:
+        if not filepath.lower().endswith(".pdf"):
+            filepath += ".pdf"
+            
+        parent_dir = os.path.dirname(filepath)
+        if parent_dir:
+            os.makedirs(parent_dir, exist_ok=True)
+            
+        pdf = FPDF()
+        pdf.set_auto_page_break(auto=True, margin=15)
+        pdf.add_page()
+
+        # Unicode special characters & dashes cleanup (No more '?' in words)
+        replacements = {
+            "\u2010": "-", "\u2011": "-", "\u2012": "-", "\u2013": "-", "\u2014": "-", "\u2015": "-", "\u2212": "-",
+            "\u2018": "'", "\u2019": "'", "\u201a": "'", "\u201b": "'",
+            "\u201c": '"', "\u201d": '"', "\u201e": '"', "\u201f": '"',
+            "\u2022": "-", "\u2023": "-", "\u2043": "-", "\u2026": "..."
+        }
+        for k, v in replacements.items():
+            content = content.replace(k, v)
+            if title:
+                title = title.replace(k, v)
+                
+        content = content.encode("latin-1", "replace").decode("latin-1")
+        if title:
+            title = title.encode("latin-1", "replace").decode("latin-1")
+
+        # Main Document Title
+        if title:
+            pdf.set_font("Helvetica", style="B", size=16)
+            pdf.cell(0, 10, text=title, new_x="LMARGIN", new_y="NEXT", align="C")
+            pdf.ln(5)
+
+                # Body Content with clean Headings & Markdown Bold
+        for line in content.split("\n"):
+            line = line.strip()
+            if not line:
+                pdf.ln(3)
+                continue
+            
+            # new_x="LMARGIN", new_y="NEXT" potta thaan adutha line left margin-ku reset aagum!
+            if line.startswith("### "):
+                pdf.set_font("Helvetica", style="B", size=12)
+                pdf.multi_cell(0, 7, text=line[4:], markdown=True, new_x="LMARGIN", new_y="NEXT")
+            elif line.startswith("## "):
+                pdf.ln(2)
+                pdf.set_font("Helvetica", style="B", size=13)
+                pdf.multi_cell(0, 7, text=line[3:], markdown=True, new_x="LMARGIN", new_y="NEXT")
+            elif line.startswith("# "):
+                pdf.ln(3)
+                pdf.set_font("Helvetica", style="B", size=15)
+                pdf.multi_cell(0, 8, text=line[2:], markdown=True, new_x="LMARGIN", new_y="NEXT")
+            else:
+                pdf.set_font("Helvetica", size=10)
+                pdf.multi_cell(0, 6, text=line, markdown=True, new_x="LMARGIN", new_y="NEXT")
+
+        pdf.output(filepath)
+        return f"Successfully created PDF: {os.path.abspath(filepath)}"
+    except Exception as e:
+        return f"Error creating pdf: {str(e)}"
+
+        
 
 #=====================================================
 #                 AVAILABLE TOOLS
@@ -164,6 +274,9 @@ available_tools = {
     "find_application": find_application,
     "launch_app_by_path": launch_app_by_path,
     "scrape_webpage": scrape_webpage,
+    "run_terminal_cammand": run_terminal_cammand,
+    "read_skill": read_skill,
+    "create_pdf": create_pdf,
 }
 
 
@@ -309,4 +422,48 @@ tools = [
             }
         }
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "run_terminal_cammand",
+            "description": "Execute a Windows shell/terminal command (e.g. 'ipconfig', 'ping 8.8.8.8', 'systeminfo', 'git status') and return the console output.",
+            "parameters": {
+                "type": "object",
+                "properties":{
+                    "command": {"type": "string", "description": "The exact shell command line string to run."}
+                },
+                "required": ["command"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "read_skill",
+            "description": "Read step-by-step guidelines and workflows from a skill markdown file in the skills folder before performing complex tasks.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "skill_name": {"type": "string", "description": "Name of the skill to read (e.g. 'web_research', 'coding_helper', 'system_admin')."}
+                },
+                "required": ["skill_name"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_pdf",
+            "description": "Create a formatted PDF document with a title and text content.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "filepath": {"type": "string", "description": "Path or file name of the PDF to create (e.g. 'ai_report.pdf' or 'notes/summary.pdf')."},
+                    "content": {"type": "string", "description": "Text content to write inside the PDF body."},
+                    "title": {"type": "string", "description": "Title for the document header (e.g. 'AI Research Report')."},
+                },
+                "required": ["filepath", 'content']
+            }
+        }
+    }
 ]
