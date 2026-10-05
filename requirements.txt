@@ -1,6 +1,7 @@
 groq
 python-dotenv
 rich
+prompt_toolkit
 ddgs
 openai
 beautifulsoup4
