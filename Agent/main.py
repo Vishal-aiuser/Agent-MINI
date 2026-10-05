@@ -32,8 +32,8 @@ api_key = os.getenv("GROQ_API_KEY")
 model = "openai/gpt-oss-120b"
 client = OpenAI(base_url = base_url, api_key = api_key)
 
-box_style = box.ASCII
-box_color = "dark_orange"
+box_style = box.ASCII       # styles: box.ROUNDED, box.SQUARE, box.HEAVY, box.DOUBLE, box.MINIMAL, box.HORIZONTALS, box.ASCII, box.SIMPLE
+box_color = "red"   # Colors: dark_orange, orange1, orange3, yellow, cyan, red, purple, green, etc,...
 # ============================== SESSION TOKEN DETAILS ============================================================
 total_tokens_used = 0
 prompt_tokens_used = 0
@@ -148,7 +148,7 @@ def main():
                     console.print(Panel(f"Memory Clean cancelled!",title="[dark_orange]MINI[/dark_orange]", title_align="left", border_style=box_color,box=box_style, expand="True"))
                     continue
             if user_input == "/help":
-                console.print(f"{show_commands}")
+                console.print(Panel(f"{show_commands}",title="[dark_orange]MINI[/dark_orange]", title_align="left", border_style=box_color,box=box_style, expand="True"))
                 continue
 
             
