@@ -27,13 +27,13 @@ console = Console()
 load_dotenv()
 
 #####################################################  VARIABLES  ################################################################################
-base_url = os.getenv("GROQ_BASE_URL")
-api_key = os.getenv("GROQ_API_KEY")
-model = "openai/gpt-oss-120b"
+base_url = os.getenv("NVIDIA_BASE_URL")
+api_key = os.getenv("NVIDIA_API_KEY")
+model = "nvidia/nemotron-3-ultra-550b-a55b"
 client = OpenAI(base_url = base_url, api_key = api_key)
 
-box_style = box.ASCII       # styles: box.ROUNDED, box.SQUARE, box.HEAVY, box.DOUBLE, box.MINIMAL, box.HORIZONTALS, box.ASCII, box.SIMPLE
-box_color = "red"   # Colors: dark_orange, orange1, orange3, yellow, cyan, red, purple, green, etc,...
+box_style = box.ASCII       # styles: box.ASCII, box.ROUNDED, box.SQUARE, box.HEAVY, box.DOUBLE, box.MINIMAL, box.HORIZONTALS, box.SIMPLE
+box_color = "dark_orange"   # Colors: dark_orange, orange1, orange3, yellow, cyan, red, purple, green, etc,...
 # ============================== SESSION TOKEN DETAILS ============================================================
 total_tokens_used = 0
 prompt_tokens_used = 0
@@ -113,7 +113,7 @@ prompt_style = Style.from_dict({
     "scrollbar.button": "bg:#ff8c00",
 })
 command_completer = WordCompleter(
-        ["/bye", "/exit", "/clear", "/help"],
+        ["/bye", "/clear", "/help"],
         ignore_case=True
     )
 
