@@ -16,7 +16,7 @@ from rich.prompt import Prompt
 from rich.align import Align 
 
 from prompt_toolkit import PromptSession 
-from prompt_toolkit.completion import WordCompleter
+from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.history import InMemoryHistory
 from prompt_toolkit.styles import Style 
 from prompt_toolkit import HTML
@@ -31,9 +31,12 @@ base_url = os.getenv("NVIDIA_BASE_URL")
 api_key = os.getenv("NVIDIA_API_KEY")
 model = "nvidia/nemotron-3-ultra-550b-a55b"
 client = OpenAI(base_url = base_url, api_key = api_key)
+reasoning_effort="medium"    # "low", "medium", or "high"
+
 
 box_style = box.ASCII       # styles: box.ASCII, box.ROUNDED, box.SQUARE, box.HEAVY, box.DOUBLE, box.MINIMAL, box.HORIZONTALS, box.SIMPLE
-box_color = "dark_orange"   # Colors: dark_orange, orange1, orange3, yellow, cyan, red, purple, green, etc,...
+box_color = "bold dark_orange"   # Colors: dark_orange, orange1, orange3, yellow, cyan, red, purple, green, etc,...
+
 # ============================== SESSION TOKEN DETAILS ============================================================
 total_tokens_used = 0
 prompt_tokens_used = 0
@@ -49,7 +52,8 @@ def call_model(messages):
             messages=messages,
             tools=tools,
             tool_choice="auto",
-            temperature=0.7,
+            temperature=0.2,
+            reasoning_effort=reasoning_effort   
         )
 # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>  SYSTEM : MODEL RESPONSE  <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
     #console.print(Panel(f"[white dim]{responses}[/white dim]", title="[bold white]LLM RESPONSE[/bold white]", title_align="center", border_style="white dim"))
@@ -79,7 +83,9 @@ def health_check():
         overall_status = "[red] Issue Detected[/red]"
     return api_status, model_status, tools_status, overall_status
 # =================================================================================================================
-
+# Frame Box
+def console_box(content):
+    console.print(Panel(f"{content}",title="[dark_orange]MINI[/dark_orange]", title_align="left", border_style=box_color,box=box_style, expand="True"))
 
 # ================ HERO SCREEEN PANEL =============================================================================
 api_status, model_status, tools_status, overall_status = health_check()
@@ -87,12 +93,11 @@ api_status, model_status, tools_status, overall_status = health_check()
 hero_screen = f"""
 [dark_orange]          Hey! this is 'Agent MINI' [/dark_orange]
 [italic]              Your AI Assistant [/italic]
-[{box_color}]----------------------------------------------[/{box_color}]
-[bold white]Agent Status: [/bold white][yellow]
+[{box_color}]----------------------------------------------[/{box_color}][bold white]
         • API KEY = {api_status}
         • MODEL   = {model_status}
         • TOOLS   = {tools_status}
-        • OVERALL = {overall_status}[/yellow]
+        • OVERALL = {overall_status}[/bold white]
 [{box_color}]----------------------------------------------[/{box_color}]
 [dim] 
 Type '[purple]/bye[/purple]' or '[purple]/exit[/purple]' to end this conversation
@@ -112,10 +117,22 @@ prompt_style = Style.from_dict({
     "scrollbar.background": "bg:#1e1e1e",
     "scrollbar.button": "bg:#ff8c00",
 })
-command_completer = WordCompleter(
-        ["/bye", "/clear", "/help"],
-        ignore_case=True
-    )
+class SlashCommandCompleter(Completer):
+    def __init__(self, command):
+        self.commands = command
+    
+    def get_completions(self, document, complete_event):
+        text_before_cursor = document.text_before_cursor 
+        if text_before_cursor.startswith("/"):
+            for cmd in self.commands:
+                if cmd.lower().startswith(text_before_cursor.lower()):
+                    yield Completion(
+                        text=cmd,
+                        start_position=-len(text_before_cursor)
+                    )
+
+commands_list = ["/bye", "/clear", "/help", "/effort"]
+command_completer = SlashCommandCompleter(commands_list)
 
 session = PromptSession(
     history=InMemoryHistory(),
@@ -126,7 +143,7 @@ session = PromptSession(
 # ==================================================================================================================
 def main():
     
-    global total_tokens_used, prompt_tokens_used, completion_tokens_used
+    global total_tokens_used, prompt_tokens_used, completion_tokens_used, reasoning_effort
 
     while True:
         #print("\n")
@@ -134,7 +151,7 @@ def main():
 
         if user_input.startswith("/"):
             if user_input.lower() in ["/bye", "/exit", "/cls"]:
-                console.print(Panel(f"See you later!",title="[dark_orange]MINI[/dark_orange]", title_align="left", border_style=box_color,box=box_style, expand="True"))
+                console_box("See you Later!..👋")
                 break
             
             if user_input == "/clear":
@@ -142,19 +159,34 @@ def main():
                 if confirm_input.lower() == "y":
                     from memory import mem_clear
                     mem_clean=mem_clear()
-                    console.print(Panel(f"{mem_clean}",title="[dark_orange]MINI[/dark_orange]", title_align="left", border_style=box_color,box=box_style, expand="True"))
+                    console_box(mem_clean)
                     continue
                 else:
-                    console.print(Panel(f"Memory Clean cancelled!",title="[dark_orange]MINI[/dark_orange]", title_align="left", border_style=box_color,box=box_style, expand="True"))
+                    console_box("Memory Cleaning Cancelled!")
                     continue
-            if user_input == "/help":
-                console.print(Panel(f"{show_commands}",title="[dark_orange]MINI[/dark_orange]", title_align="left", border_style=box_color,box=box_style, expand="True"))
+            if user_input.lower() == "/help":
+                console_box(show_commands)
                 continue
 
-            
+            if user_input.lower().startswith("/effort"):
+                if user_input.lower() == "/effort low":
+                    reasoning_effort = "low"
+                    console_box("Effort level changed to 'low'.")
+                    continue
+                elif user_input.lower() == "/effort medium":
+                    reasoning_effort = "meduim"
+                    console_box("Effort level changed to 'medium'.")
+                    continue
+                elif user_input.lower() == "/effort high":
+                    reasoning_effort = "high"
+                    console_box("Effort level changed to 'high'.")
+                    continue
+                else:
+                    console_box("Available Efforts: 'low', 'medium', 'high', (e.g. \"/effort medium\")")
+                    continue
 
         if not user_input.strip():
-            console.print(f"[bold yellow]Ask Anything..[/bold yellow]")
+            console_box("Ask Anythink...")
             continue
         
         conversations.append({"role": "user", "content": user_input})
@@ -190,6 +222,8 @@ def main():
                             tool_output = f"Error executing tool '{tool_name}': {str(e)}"
  # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>  SYSTEM : TOOL OUPUT  <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
                         #console.print(Panel(f"[white dim]Tool Name: {tool_name}\nArgument: {tool_args}\nOutput: {tool_output}[/white dim]", title="[bold white]TOOL RESPONSE[/bold white]", title_align="center", border_style="white dim"))
+                        #console.print(Panel(f"[white dim]Tool Name: {tool_name}", title="[bold white]TOOL RESPONSE[/bold white]", title_align="center", border_style="white dim"))
+
  # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>><<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
                         conversations.append({
                             "role": "tool",
@@ -207,7 +241,7 @@ def main():
             current_response = model_response.choices[0].message
 
 # =================== AGENT's FINAL RESPONSE =====================================================================
-        sub_details=f"[dim][white]Total Tokens Used:[/white] {total_tokens_used} [white]| Active Model:[/white] {active_model}[dim]"
+        sub_details=f"[dim][white]Tokens Used:[/white] {total_tokens_used} [white]| Model:[/white] {active_model} [white]| Effort:[/white] {reasoning_effort}[dim]"
         final_response = current_response.content or ""
         console.print(
             Panel(
