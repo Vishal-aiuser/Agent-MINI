@@ -1,14 +1,16 @@
 
 import os
 import json
-from openai import OpenAI
+import time
+from config import load_config, update_config
+from openai import OpenAI, InternalServerError, NotFoundError, APITimeoutError
 from dotenv import load_dotenv
 from memory import conversations
 from tools import available_tools, tools
-from panelshow import show_commands
-
+from panelshow import show_commands, logo_art
 
 from rich import box
+from rich.table import Table
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
@@ -27,46 +29,98 @@ console = Console()
 load_dotenv()
 
 #####################################################  VARIABLES  ################################################################################
-base_url = os.getenv("NVIDIA_BASE_URL")
-api_key = os.getenv("NVIDIA_API_KEY")
-model = "nvidia/nemotron-3-ultra-550b-a55b"
+
+
+BOX_STYLES = {
+    "ASCII": box.ASCII,
+    "ROUNDED": box.ROUNDED,
+    "SQUARE": box.SQUARE,
+    "HEAVY": box.HEAVY,
+    "DOUBLE": box.DOUBLE,
+    "MINIMAL": box.MINIMAL,
+    "HORIZONTALS": box.HORIZONTALS,
+    "SIMPLE": box.SIMPLE
+}
+
+# Config load
+config = load_config()
+model = config.get("model")
+box_color = config.get("box_color")
+box_style = BOX_STYLES.get(config.get("box_style"), box.ASCII)
+reasoning_effort = config.get("reasoning_effort")
+
+configured_provider = config.get("provider")
+base_url = os.getenv(f"{configured_provider.upper()}_BASE_URL")
+api_key = os.getenv(f"{configured_provider.upper()}_API_KEY")
+
+
 client = OpenAI(base_url = base_url, api_key = api_key)
-reasoning_effort="medium"    # "low", "medium", or "high"
-
-
-box_style = box.ASCII       # styles: box.ASCII, box.ROUNDED, box.SQUARE, box.HEAVY, box.DOUBLE, box.MINIMAL, box.HORIZONTALS, box.SIMPLE
-box_color = "bold dark_orange"   # Colors: dark_orange, orange1, orange3, yellow, cyan, red, purple, green, etc,...
 
 # ============================== SESSION TOKEN DETAILS ============================================================
 total_tokens_used = 0
 prompt_tokens_used = 0
 completion_tokens_used = 0
 
+# ===============================================================================================================================================================
+# Frame Box
+def console_box(content):
+    console.print(Panel(f"{content}",title="[dark_orange]MINI[/dark_orange]", title_align="left", border_style=box_color,box=box_style, expand="True"))
+
+# SYSTEM Message
+def sys_message(content, color="red"):
+    console.print(f"[{color}][SYSTEM: {content}][/{color}]")
+
 ###############################################################################################################################################
 # ==================== LLM CALL FUCTION ===========================================================================
 
-def call_model(messages):
-    with console.status(f"[{box_color} dim]Thinking...[/{box_color} dim]", spinner="dots3", spinner_style=f"{box_color} dim"):
-        responses = client.chat.completions.create(
-            model=model,  
-            messages=messages,
-            tools=tools,
-            tool_choice="auto",
-            temperature=0.2,
-            reasoning_effort=reasoning_effort   
-        )
-# >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>  SYSTEM : MODEL RESPONSE  <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-    #console.print(Panel(f"[white dim]{responses}[/white dim]", title="[bold white]LLM RESPONSE[/bold white]", title_align="center", border_style="white dim"))
-
-    return responses
+def call_model(messages, retries=5):
+    for attempt in range(retries + 1):
+        try:
+            with console.status(f"[{box_color} dim]Thinking...[/{box_color} dim]", spinner="dots3", spinner_style=f"{box_color} dim"):
+                responses = client.chat.completions.create(
+                    model=model,  
+                    messages=messages,
+                    tools=tools,
+                    tool_choice="auto",
+                    temperature=0.2,
+                    reasoning_effort=reasoning_effort,
+                    timeout=90.0   
+                )
+ # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>  SYSTEM : MODEL RESPONSE  <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+                #console.print(Panel(f"[white dim]{responses}[/white dim]", title="[bold white]LLM RESPONSE[/bold white]", title_align="center", border_style="white dim"))
+            return responses
+        except InternalServerError:
+            if attempt < retries:
+                time.sleep(2)
+                sys_message(f"Retrying connection... ({attempt+1}/{retries})")
+                continue 
+            return None
+        except NotFoundError:
+            sys_message("Model Not Found")
+            return None
+        except APITimeoutError:
+            if attempt < retries:
+                time.sleep(2)
+                sys_message(f"Request timed out. Retrying... ({attempt+1}/{retries})")
+                continue
+            sys_message("Request timed out (90s limit reached).")
+            return None
+        except Exception as e:
+            sys_message(f"{str(e)}")
+            return None
+    return None
 # ==================================================================================================================
 
 
 # ============== HEALTH CHECK FUNCTION ============================================================================
 def health_check():
+    # PROVIDER CHECK
+    provider_ok = bool(api_key)
+    provider_status = f"[green]{configured_provider}[/green]" if provider_ok else "[red]Provider Missing[/red]"
+
     # API KEY CHECK
     api_key_ok = bool(api_key)
-    api_status = "[green]Configured[/green]" if api_key_ok else "[red]Missing[red]"
+    api_status = "[green]Configured[/green]" if api_key_ok else "[red]Missing[/red]"
 
     # MODEL NAME
     model_ok = bool(model)
@@ -77,35 +131,34 @@ def health_check():
     tools_status = f"[green]({len(available_tools)} tools) Available[/green]" if tools_ok else "[red]Tools not configured[/red]"
 
     # OVERALL STATUS CHECK
-    if api_key_ok and model_ok and tools_ok:
+    if provider_ok and api_key_ok and model_ok and tools_ok:
         overall_status = "[green]Healthy[/green]"
     else:
         overall_status = "[red] Issue Detected[/red]"
-    return api_status, model_status, tools_status, overall_status
+    return provider_status, api_status, model_status, tools_status, overall_status
 # =================================================================================================================
-# Frame Box
-def console_box(content):
-    console.print(Panel(f"{content}",title="[dark_orange]MINI[/dark_orange]", title_align="left", border_style=box_color,box=box_style, expand="True"))
 
 # ================ HERO SCREEEN PANEL =============================================================================
-api_status, model_status, tools_status, overall_status = health_check()
 
-hero_screen = f"""
-[dark_orange]          Hey! this is 'Agent MINI' [/dark_orange]
-[italic]              Your AI Assistant [/italic]
-[{box_color}]----------------------------------------------[/{box_color}][bold white]
-        • API KEY = {api_status}
-        • MODEL   = {model_status}
-        • TOOLS   = {tools_status}
-        • OVERALL = {overall_status}[/bold white]
-[{box_color}]----------------------------------------------[/{box_color}]
+provider_status, api_status, model_status, tools_status, overall_status = health_check()
+
+status_text = f"""
+[white bold]                  Your AI Agent [/white bold]
+[{box_color}] ----------------------------------------------[/{box_color}][bold white]
+         • PROVIDER = {provider_status}
+         • API KEY  = {api_status}
+         • MODEL    = {model_status}
+         • TOOLS    = {tools_status}
+         • OVERALL  = {overall_status}[/bold white]
+[{box_color}] ----------------------------------------------[/{box_color}]
 [dim] 
 Type '[purple]/bye[/purple]' or '[purple]/exit[/purple]' to end this conversation
             '[purple]/help[/purple]' for all commands.
 [/dim]
 """
 
-console.print(Panel(Align.center(hero_screen), expand=True, border_style=box_color, box=box_style))
+console.print(Panel(Align.center(f"[{box_color}]{logo_art}[/{box_color}]"+status_text), expand=True, border_style=box_color, box=box_style))
+
 # =================================================================================================================
 
 # =================================================================================================================
@@ -131,7 +184,7 @@ class SlashCommandCompleter(Completer):
                         start_position=-len(text_before_cursor)
                     )
 
-commands_list = ["/bye", "/clear", "/help", "/effort"]
+commands_list = ["/bye", "/clear", "/help", "/effort", "/model", "/color", "/provider"]
 command_completer = SlashCommandCompleter(commands_list)
 
 session = PromptSession(
@@ -143,54 +196,128 @@ session = PromptSession(
 # ==================================================================================================================
 def main():
     
-    global total_tokens_used, prompt_tokens_used, completion_tokens_used, reasoning_effort
+    global client, total_tokens_used, prompt_tokens_used, completion_tokens_used, reasoning_effort, box_color, model, base_url, api_key
 
     while True:
         #print("\n")
         user_input = session.prompt("YOU ❯ ")
 
+        # Command filter
         if user_input.startswith("/"):
             if user_input.lower() in ["/bye", "/exit", "/cls"]:
                 console_box("See you Later!..👋")
                 break
             
+            # Chat memory Clear command:
             if user_input == "/clear":
                 confirm_input = Prompt.ask("[dark_orange]MINI: [/dark_orange]Are you sure to clear this Chat Memory? (Y/N)")
                 if confirm_input.lower() == "y":
                     from memory import mem_clear
                     mem_clean=mem_clear()
-                    console_box(mem_clean)
+                    total_tokens_used = 0
+                    prompt_tokens_used = 0 
+                    completion_tokens_used = 0
+                    sys_message(mem_clean,"green")
                     continue
                 else:
-                    console_box("Memory Cleaning Cancelled!")
+                    sys_message("Memory Cleaning Cancelled!")
                     continue
+            
+            # Help Command
             if user_input.lower() == "/help":
                 console_box(show_commands)
                 continue
 
-            if user_input.lower().startswith("/effort"):
-                if user_input.lower() == "/effort low":
+            # Effor change Command:
+            if user_input.startswith("/effort"):
+                if user_input == "/effort low":
                     reasoning_effort = "low"
+                    update_config("reasoning_effort", reasoning_effort)
                     console_box("Effort level changed to 'low'.")
                     continue
-                elif user_input.lower() == "/effort medium":
-                    reasoning_effort = "meduim"
+                elif user_input == "/effort medium":
+                    reasoning_effort = "medium"
+                    update_config("reasoning_effort", reasoning_effort)
                     console_box("Effort level changed to 'medium'.")
                     continue
-                elif user_input.lower() == "/effort high":
+                elif user_input == "/effort high":
                     reasoning_effort = "high"
+                    update_config("reasoning_effort", reasoning_effort)
                     console_box("Effort level changed to 'high'.")
                     continue
                 else:
-                    console_box("Available Efforts: 'low', 'medium', 'high', (e.g. \"/effort medium\")")
+                    sys_message("Available Efforts: 'low', 'medium', 'high', (e.g. \"/effort medium\")")
                     continue
 
+            # Box Color change command:
+            if user_input.lower().startswith("/color"):
+                parts = user_input.split(maxsplit=1)
+                if len(parts) == 2:
+                    new_color = parts[1]
+                    box_color = new_color
+                    update_config("box_color", new_color)
+                    sys_message(f"Theme color saved as: '{new_color}'", "green")
+                    continue 
+                else:
+                    sys_message(f"Invalid Color Command. (Try: e.g. '/color bold red')")
+                    continue
+            
+            # Change Provider
+            if user_input.lower().startswith("/provider"):
+                parts = user_input.split(maxsplit=1)
+                if len(parts) >1:
+                    new_provider = parts[1].lower()
+                    if new_provider == "groq":
+                        base_url = os.getenv("GROQ_BASE_URL")
+                        api_key = os.getenv("GROQ_API_KEY")
+                        update_config("provider", "groq")
+                        client = OpenAI(base_url=base_url, api_key=api_key)
+                        sys_message("Provider changed as 'groq'.", "green")
+                        continue
+                    if new_provider in ["nvidia", "nvidia nim", "nvidia_nim", "nvidia-nim"]:
+                        base_url = os.getenv("NVIDIA_BASE_URL")
+                        api_key = os.getenv("NVIDIA_API_KEY")
+                        update_config("provider", "nvidia")
+                        client = OpenAI(base_url=base_url, api_key=api_key)
+                        sys_message("Provider changed as 'nvidia.'", "green")
+                        continue
+                    if new_provider in ["custom_provider", "custom provider", "custom-provider"]:
+                        base_url = os.getenv("CUSTOM_PROVIDER_BASE_URL")
+                        api_key = os.getenv("CUSTOM_PROVIDER_API_KEY")
+                        update_config("provider", "custom_provider")
+                        client = OpenAI(base_url=base_url, api_key=api_key)
+                        sys_message("Provider changed as 'custom_provider'.", "green")
+                        continue 
+                    else:
+                        sys_message("Invalid Provider. (Valid Providers: 'groq', 'nvidia', 'custom').")
+                        continue
+                else:
+                    sys_message("Invalid Provider. (Valid Providers: 'groq', 'nvidia', 'custom').")
+                    continue
+
+
+            # Model Change Command:
+            if user_input.startswith("/model"):
+                parts = user_input.split(maxsplit=1)
+                if len(parts) == 2:
+                    new_model = parts[1].strip()
+                    model = new_model
+                    update_config("model", new_model)
+                    sys_message(f"Model permanently changed to: '{new_model}'", "green")
+                    continue 
+                else:
+                    sys_message(f"Type '/model <model_name>' (e.g., /model qwen/qwen3.8-27b)")
+                    continue 
+
+        # Empty Prompt:
         if not user_input.strip():
             console_box("Ask Anythink...")
             continue
         
         conversations.append({"role": "user", "content": user_input})
         model_response = call_model(messages=conversations)
+        if not model_response:
+            continue
         # ------------------ APPEND TOKENS DETAILS ---------------------------------
         total_tokens_used += model_response.usage.total_tokens
         prompt_tokens_used += model_response.usage.prompt_tokens 
@@ -223,7 +350,7 @@ def main():
  # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>  SYSTEM : TOOL OUPUT  <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
                         #console.print(Panel(f"[white dim]Tool Name: {tool_name}\nArgument: {tool_args}\nOutput: {tool_output}[/white dim]", title="[bold white]TOOL RESPONSE[/bold white]", title_align="center", border_style="white dim"))
                         #console.print(Panel(f"[white dim]Tool Name: {tool_name}", title="[bold white]TOOL RESPONSE[/bold white]", title_align="center", border_style="white dim"))
-
+                        console.print(f"[dim] > '{tool_name.upper()}' Tool called[/dim]")
  # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>><<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
                         conversations.append({
                             "role": "tool",
@@ -232,6 +359,8 @@ def main():
                         })
 
             model_response = call_model(messages=conversations)
+            if not model_response:
+                break
         # ------------------ APPEND TOKENS DETAILS ---------------------------------
             total_tokens_used += model_response.usage.total_tokens
             prompt_tokens_used += model_response.usage.prompt_tokens 
@@ -246,8 +375,8 @@ def main():
         console.print(
             Panel(
                 Markdown(final_response),
-                title="[dark_orange]MINI[/dark_orange]",
-                subtitle=f"[orange3]{sub_details}[/orange3]",
+                title=f"[bold {box_color}]MINI[/bold {box_color}]",
+                subtitle=f"[{box_color} dim]{sub_details}[/{box_color} dim]",
                 title_align="left",
                 subtitle_align="right",
                 border_style=box_color,

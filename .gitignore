@@ -25,3 +25,5 @@ ENV/
 # Generated sandbox & PDFs
 sandbox/
 *.pdf
+
+notes.txt

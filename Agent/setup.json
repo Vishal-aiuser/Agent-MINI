@@ -1,0 +1,7 @@
+{
+    "provider": "custom_provider",
+    "model": "claude_chat",
+    "reasoning_effort": "low",
+    "box_color": "dark_orange",
+    "box_style": "ASCII"
+}

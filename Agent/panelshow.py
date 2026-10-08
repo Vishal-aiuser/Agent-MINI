@@ -1,4 +1,17 @@
 
+
+# Agent MINI ICON
+logo_art = f"""
+       ▀      ▀
+[white bold]   ▄[/white bold] ████████████     █▄   ▄█  ▀█▀  █▄  █  ▀█▀
+   ▀▀███▄████▄███▄    █ ▀▄▀ █   █   █ ▀▄█   █ 
+     ████████████[white bold]▀[/white bold]    █     █  ▄█▄  █   █  ▄█▄
+       █      █
+"""
+
+
+
+# HELP COMMANDS
 show_commands = """[dark_orange]COMMANDS :[/dark_orange]
 ---------------------------------------------------------------------------------
         [white]End Session[/white]               ---->  [purple]/bye[/purple], [purple]/exit[/purple], [purple]/cls[/purple]
