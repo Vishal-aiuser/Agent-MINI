@@ -8,6 +8,8 @@ from dotenv import load_dotenv
 from memory import conversations
 from tools import available_tools, tools
 from panelshow import show_commands, logo_art
+from session_manager import save_session, list_sessions, load_session, export_session_markdown
+
 
 from rich import box
 from rich.table import Table
@@ -76,7 +78,7 @@ def sys_message(content, color="red"):
 def call_model(messages, retries=5):
     for attempt in range(retries + 1):
         try:
-            with console.status(f"[{box_color} dim]Thinking...[/{box_color} dim]", spinner="dots3", spinner_style=f"{box_color} dim"):
+            with console.status(f"[{box_color} dim]Thinking...[/{box_color} dim]", spinner="dots", spinner_style=f"{box_color} dim"):
                 responses = client.chat.completions.create(
                     model=model,  
                     messages=messages,
@@ -160,6 +162,39 @@ Type '[purple]/bye[/purple]' or '[purple]/exit[/purple]' to end this conversatio
 console.print(Panel(Align.center(f"[{box_color}]{logo_art}[/{box_color}]"+status_text), expand=True, border_style=box_color, box=box_style))
 
 # =================================================================================================================
+# Get Providers All Model:
+def get_provider_models():
+    """Fetch all available models from current  active client"""
+    try:
+        with console.status(f"[{box_color} dim]Fetching Models from the provider...[/{box_color} dim]", spinner="dots3", spinner_style=f"{box_color} dim"):
+            response = client.models.list()
+            model_list = [m.id for m in response.data]
+            return sorted(model_list)
+    except Exception as e:
+        sys_message(f"Failed to fetch models: {str(e)}")
+        return[]
+
+# Display models Table:
+def display_models_table(model_list):
+    """Render models in a clean Rich Table"""
+    if not model_list:
+        sys_message("No models found or API Key not configured.")
+        return
+    
+    table = Table(
+        title=f"[{box_color}]Available Models({configured_provider.upper()})[/{box_color}]",
+        box=box_style,
+        border_style=box_color
+    )
+    table.add_column("No.", justify="right", style="dim", width=5)
+    table.add_column("Model ID", justify="left", style="bold white")
+    table.add_column("Status", justify="center")
+
+    for idx, model_id in enumerate(model_list, start=1):
+        is_active="[green]ACTIVE[/green]" if model_id == model else ""
+
+        table.add_row(str(idx), model_id, is_active)
+    console.print(table)
 
 # =================================================================================================================
 
@@ -184,7 +219,7 @@ class SlashCommandCompleter(Completer):
                         start_position=-len(text_before_cursor)
                     )
 
-commands_list = ["/bye", "/clear", "/help", "/effort", "/model", "/color", "/provider"]
+commands_list = ["/bye", "/clear", "/help", "/effort", "/guard", "/model", "/models", "/color", "/provider", "/sessions", "/load", "/export"]
 command_completer = SlashCommandCompleter(commands_list)
 
 session = PromptSession(
@@ -193,10 +228,63 @@ session = PromptSession(
     style=prompt_style
 )
 
+# =====================================================================================================================
+# Session variable in main()
+guard_enabled = True
+
+# SENSITIVE TOOLS SET:
+SENSITIVE_TOOLS = {
+    "run_terminal_cammand",
+    "run_python_code",
+    "write_file",
+    "append_file",
+    "create_folder",
+    "launch_app_by_path",
+    "create_pdf"
+}
+
+def ask_tool_permission(tool_name, tool_args):
+    """Prompts the user for explicit confirmation before executing sensitive tools."""
+    # Argumants summary string
+    args_summary = "\n".join([f"• [bold white]{k}: [/bold white][yellow]{v}[/yellow]" for k, v in tool_args.items()])
+    warning_card = f"""[bold red]⚠️ SENSITIVE SYSTEM ACTION DETECTED[/bold red]
+[white]The agent wants to execute:[/white] [bold cyan]{tool_name}[/bold cyan]
+[white]Parameters:[/white]
+{args_summary}
+"""
+    console.print(Panel(warning_card, border_style="red", box=box.ROUNDED))
+    # Prompt confirmation
+    choice = Prompt.ask("[bold yellow]Allow this action?[/bold yellow]", choices=["y", "n", "always"], default="y")
+    return choice
+
+# ==================================================================================================================
+def format_tool_output(tool_name, tool_output):
+    """Inspects if tool output contains an error and enriches it with self-correction hints."""
+    output_str = str(tool_output).strip()
+    
+    # Starting-la Error irundha mattum thaan real error!
+    lower_out = output_str.lower()
+    is_error = lower_out.startswith("error") or lower_out.startswith("exception") or "error executing tool" in lower_out or "[tool execution failed]" in lower_out
+    
+    if is_error:
+        reflection_prompt = f"""[TOOL EXECUTION FAILED]
+Tool: {tool_name}
+Error: {output_str}
+
+AUTONOMOUS HEALING DIRECTIVE:
+- Do not stop or give up yet.
+- Analyze the exact failure cause.
+- Determine an alternative tool or corrected parameters (e.g., use 'list_files' if a path was wrong, or fix code syntax).
+- Execute the corrected step now to achieve the user's objective.
+"""
+        return reflection_prompt, True
+    return output_str, False
+
+
 # ==================================================================================================================
 def main():
-    
-    global client, total_tokens_used, prompt_tokens_used, completion_tokens_used, reasoning_effort, box_color, model, base_url, api_key
+    current_session_file = None
+    global guard_enabled, client, total_tokens_used, prompt_tokens_used, completion_tokens_used, reasoning_effort, box_color, model, base_url, api_key
 
     while True:
         #print("\n")
@@ -205,7 +293,9 @@ def main():
         # Command filter
         if user_input.startswith("/"):
             if user_input.lower() in ["/bye", "/exit", "/cls"]:
-                console_box("See you Later!..👋")
+                saved_file = save_session(conversations, existing_filename=current_session_file)
+                if saved_file:
+                    console_box(f"Session auto-saved as '{saved_file}'.\nSee you Later!..👋")
                 break
             
             # Chat memory Clear command:
@@ -214,6 +304,7 @@ def main():
                 if confirm_input.lower() == "y":
                     from memory import mem_clear
                     mem_clean=mem_clear()
+                    current_session_file = None
                     total_tokens_used = 0
                     prompt_tokens_used = 0 
                     completion_tokens_used = 0
@@ -228,6 +319,7 @@ def main():
                 console_box(show_commands)
                 continue
 
+            
             # Effor change Command:
             if user_input.startswith("/effort"):
                 if user_input == "/effort low":
@@ -249,6 +341,23 @@ def main():
                     sys_message("Available Efforts: 'low', 'medium', 'high', (e.g. \"/effort medium\")")
                     continue
 
+             # Toggle Safety Guardrails Command
+            if user_input.lower().startswith("/guard"):
+                parts = user_input.split(maxsplit=1)
+                if len(parts) == 2:
+                    mode = parts[1].strip().lower()
+                    if mode in ["on", "enable", "true"]:
+                        guard_enabled = True
+                        sys_message("Guardrails ENABLED. Sensitive actions require confirmation.", "green")
+                        continue
+                    elif mode in ["off", "disable", "false"]:
+                        guard_enabled = False
+                        sys_message("Guardrails DISABLED. Agent will run in full autonomous mode.", "yellow")
+                        continue
+                sys_message("Usage: '/guard on' or '/guard off'")
+                continue
+
+
             # Box Color change command:
             if user_input.lower().startswith("/color"):
                 parts = user_input.split(maxsplit=1)
@@ -261,6 +370,52 @@ def main():
                 else:
                     sys_message(f"Invalid Color Command. (Try: e.g. '/color bold red')")
                     continue
+
+
+            #List Saved Sessions
+            if user_input.lower() == "/sessions":
+                all_sessions = list_sessions()
+                if not all_sessions:
+                    sys_message("No saved sessions found.")
+                    continue
+                table = Table(title=f"[{box_color}]Saved Chat Sessions[/{box_color}]", box=box_style, border_style=box_color)
+                table.add_column("No.", justify="right", style="dim", width=4)
+                table.add_column("Date & Time", style="cyan")
+                table.add_column("Topic / Title", style="bold white")
+                table.add_column("Msgs", justify="center", style="dim")
+                for idx, s in enumerate(all_sessions, start=1):
+                    table.add_row(str(idx), s["timestamp"], s["title"], str(s["message_count"]))
+                console.print(table)
+                console.print(f"[dim]Tip: Use '[{box_color}]/load <number>[/{box_color}]' to resume a chat session.[/dim]\n")
+                continue
+
+
+            # Load/Resume session
+            if user_input.lower().startswith("/load"):
+                parts = user_input.split(maxsplit=1)
+                if len(parts) == 2 and parts[1].strip().isdigit():
+                    idx = int(parts[1].strip()) - 1
+                    all_sessions = list_sessions()
+                    if 0 <= idx < len(all_sessions):
+                        loaded_msgs = load_session(all_sessions[idx]["file"])
+                        if loaded_msgs:
+                            conversations.clear()
+                            conversations.extend(loaded_msgs)
+                            current_session_file = all_sessions[idx]["file"]
+                            sys_message(f"Resumed session: '{all_sessions[idx]['title']}'", "green")
+                            continue
+                    sys_message("Invalid session number.")
+                    continue
+                sys_message("Usage: '/load <session_number>' (e.g. /load 1)")
+                continue
+
+
+            # Export session to markdown
+            if user_input.lower() == "/export":
+                export_file = export_session_markdown(conversations)
+                sys_message(f"Chat exported successfully to '{export_file}'", "green")
+                continue
+
             
             # Change Provider
             if user_input.lower().startswith("/provider"):
@@ -281,7 +436,7 @@ def main():
                         client = OpenAI(base_url=base_url, api_key=api_key)
                         sys_message("Provider changed as 'nvidia.'", "green")
                         continue
-                    if new_provider in ["custom_provider", "custom provider", "custom-provider"]:
+                    if new_provider in ["custom_provider", "custom provider", "custom-provider", "custom"]:
                         base_url = os.getenv("CUSTOM_PROVIDER_BASE_URL")
                         api_key = os.getenv("CUSTOM_PROVIDER_API_KEY")
                         update_config("provider", "custom_provider")
@@ -289,18 +444,38 @@ def main():
                         sys_message("Provider changed as 'custom_provider'.", "green")
                         continue 
                     else:
-                        sys_message("Invalid Provider. (Valid Providers: 'groq', 'nvidia', 'custom').")
+                        sys_message("Invalid Provider. (Valid Providers: 'groq', 'nvidia', 'custom_provider').")
                         continue
                 else:
                     sys_message("Invalid Provider. (Valid Providers: 'groq', 'nvidia', 'custom').")
                     continue
 
+            # List & select Models Command
+            if user_input.lower().startswith("/models"):
+                parts = user_input.split(maxsplit=1)
+
+                if len(parts) ==1:
+                    available_models = get_provider_models()
+                    display_models_table(available_models)
+                    console.print(f"[dim]Tip: Use '[{box_color}]/model <number or name>[/{box_color}]' to switch models.[/dim]\n")
+                    continue
+                    
 
             # Model Change Command:
             if user_input.startswith("/model"):
                 parts = user_input.split(maxsplit=1)
                 if len(parts) == 2:
-                    new_model = parts[1].strip()
+                    arg = parts[1].strip()
+                    if arg.isdigit():
+                        available_models = get_provider_models()
+                        idx = int(arg) - 1
+                        if 0 <= idx < len(available_models):
+                            new_model = available_models[idx]
+                        else:
+                            sys_message(f"Invalid Model number. Choose between 1 and {len(available_models)}.")
+                            continue
+                    else:
+                        new_model = arg
                     model = new_model
                     update_config("model", new_model)
                     sys_message(f"Model permanently changed to: '{new_model}'", "green")
@@ -309,6 +484,10 @@ def main():
                     sys_message(f"Type '/model <model_name>' (e.g., /model qwen/qwen3.8-27b)")
                     continue 
 
+            else:
+                console_box(f"Invalid Command!. Use '[purple]/help[/purple]' command to see all Valid commands.")
+                continue 
+                
         # Empty Prompt:
         if not user_input.strip():
             console_box("Ask Anythink...")
@@ -327,10 +506,10 @@ def main():
         current_response = model_response.choices[0].message
 
  # ========================== TOOL CALL ACTIONS ========================================================================================================
-       # tool_step_count = 0
-      #  max_tool_steps = 4
-        while current_response.tool_calls: #and tool_step_count < max_tool_steps:
-            #tool_step_count += 1
+        max_tool_steps = 25 
+        tool_step_count = 0
+        while current_response.tool_calls and tool_step_count < max_tool_steps:
+            tool_step_count += 1
             conversations.append(current_response)
 
             for tool_call in current_response.tool_calls:
@@ -340,6 +519,22 @@ def main():
                 tool_args = {k: v for k, v in tool_args.items() if k != ""}
 
                 if tool_to_call:
+                    # 🛡️ SAFETY GUARDRAIL CHECK
+                    if guard_enabled and tool_name in SENSITIVE_TOOLS:
+                        decision = ask_tool_permission(tool_name, tool_args)
+                        if decision == "n":
+                            sys_message(f"Action '{tool_name}' blocked by user.", "yellow")
+                            tool_output = "Error: Tool execution was denied/cancelled by the user. Please stop or suggest an alternative approach."
+                            conversations.append({
+                                "role": "tool",
+                                "tool_call_id": tool_call.id,
+                                "content": str(tool_output),
+                            })
+                            continue
+                        elif decision == "always":
+                            guard_enabled = False 
+                            sys_message("Safety Guardrails disabled for this session (Auto-Approve Enabled).", "yellow")
+                    # ⚡ TOOL EXECUTION
                     with console.status(f"[{box_color} dim]{tool_name} Tool Calling...[/{box_color} dim]", spinner="star", spinner_style=f"{box_color} dim"):
                         try:
                             tool_output = (tool_to_call(**tool_args)if tool_args else tool_to_call())
@@ -347,15 +542,22 @@ def main():
                             tool_output = tool_to_call()
                         except Exception as e:
                             tool_output = f"Error executing tool '{tool_name}': {str(e)}"
- # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>  SYSTEM : TOOL OUPUT  <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+                        # 🔄 SELF-CORRECTION & AUTONOMOUS HEALING CHECK
+                        enriched_output, has_error = format_tool_output(tool_name, tool_output)
+                        if has_error:
+                            console.print(f"[{box_color} dim] ↳ ⚠️ Error detected in '{tool_name}'. Triggering autonomous healing...[/{box_color} dim]")
+                        else:
+                            console.print(f"[dim] > '{tool_name.upper()}' Tool called[/dim]")
+                        
+# >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>  SYSTEM : TOOL OUPUT  <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
                         #console.print(Panel(f"[white dim]Tool Name: {tool_name}\nArgument: {tool_args}\nOutput: {tool_output}[/white dim]", title="[bold white]TOOL RESPONSE[/bold white]", title_align="center", border_style="white dim"))
                         #console.print(Panel(f"[white dim]Tool Name: {tool_name}", title="[bold white]TOOL RESPONSE[/bold white]", title_align="center", border_style="white dim"))
-                        console.print(f"[dim] > '{tool_name.upper()}' Tool called[/dim]")
- # >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>><<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+                        
+# >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>><<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
                         conversations.append({
                             "role": "tool",
                             "tool_call_id": tool_call.id,
-                            "content": str(tool_output),
+                            "content": enriched_output,
                         })
 
             model_response = call_model(messages=conversations)

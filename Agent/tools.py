@@ -41,11 +41,49 @@ def read_file(filepath):
 # 4. FILE WRITE / CREATE
 def write_file(filepath, content):
     try:
+        # 🚨 ROOT PROTECTION HARNESS:
+        # Filepath root-la irundha (folder illama 'index.html' nu kudutha) reject pannidum!
+        clean_path = filepath.replace("\\", "/").strip()
+        if not ("/" in clean_path) and not clean_path.startswith("sandbox"):
+            return (
+                f"ERROR: Root directory file creation is strictly forbidden!\n"
+                f"You attempted to write to '{filepath}'.\n"
+                f"You MUST place project files inside a dedicated sandbox subfolder.\n"
+                f"Example: First call create_folder('sandbox/project_name'), then call write_file('sandbox/project_name/{filepath}', content)."
+            )
+
+        parent_dir = os.path.dirname(filepath)
+        if parent_dir:
+            os.makedirs(parent_dir, exist_ok=True)
+            
         with open(filepath, "w", encoding="utf-8") as f:
             f.write(content)
         return f"Successfully created/written to {filepath}"
     except Exception as e:
-        return f"Error Writting file: {str(e)}"
+        return f"Error Writing file: {str(e)}"
+
+# 4.1 FILE APPEND / PATCH (Incremental writing)
+def append_file(filepath, content):
+    try:
+        clean_path = filepath.replace("\\", "/").strip()
+        if not ("/" in clean_path) and not clean_path.startswith("sandbox"):
+            return (
+                f"ERROR: Root directory file modification is strictly forbidden!\n"
+                f"You attempted to append to '{filepath}'.\n"
+                f"You MUST place project files inside a dedicated sandbox subfolder.\n"
+                f"Example: First call create_folder('sandbox/project_name'), then call append_file('sandbox/project_name/{filepath}', content)."
+            )
+
+        parent_dir = os.path.dirname(filepath)
+        if parent_dir:
+            os.makedirs(parent_dir, exist_ok=True)
+            
+        with open(filepath, "a", encoding="utf-8") as f:
+            f.write(content)
+        return f"Successfully appended patch to {filepath}"
+    except Exception as e:
+        return f"Error appending to file: {str(e)}"
+
 
 # 5. List files in the folder
 def list_files(directory="."):
@@ -268,6 +306,7 @@ available_tools = {
     "web_search": web_search,
     "read_file": read_file,
     "write_file": write_file,
+    "append_file": append_file,
     "list_files": list_files,
     "create_folder":  create_folder,
     "run_python_code": run_python_code,
@@ -327,12 +366,33 @@ tools = [
         "type": "function",
         "function": {
             "name": "write_file",
-            "description": "Use this tool to create or write content to a file ",
+            "description": "Create a file or initialize an empty file. (To create an empty file, pass content=''). MANDATORY: File must be inside 'sandbox/<project_name>/'.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "filepath":{"type": "string", "description": "path to the file to create/write."},
-                    "content": {"type": "string", "description": "Text content to write inside the file."},
+                    "filepath": {
+                        "type": "string", 
+                        "description": "Path to create/write. MUST include directory like 'sandbox/<project_name>/filename.ext' (e.g. 'sandbox/portfolio/index.html'). NEVER write directly to root."
+                    },
+                    "content": {"type": "string", "description": "Text content to write. Pass empty string '' when initializing an empty file."},
+                },
+                "required": ["filepath", "content"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "append_file",
+            "description": "Append a chunk or patch of text/code to an existing file. Use this for incremental, patch-by-patch file construction to avoid long timeouts.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "filepath": {
+                        "type": "string", 
+                        "description": "Path to file inside sandbox (e.g. 'sandbox/<project_name>/index.html')."
+                    },
+                    "content": {"type": "string", "description": "Text or code chunk to append to the end of the file."},
                 },
                 "required": ["filepath", "content"]
             }

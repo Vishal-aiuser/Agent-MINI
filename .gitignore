@@ -27,3 +27,8 @@ sandbox/
 *.pdf
 
 notes.txt
+groqmodels.py
+
+# Chat Sessions
+.sessions/
+chat_export_*.md

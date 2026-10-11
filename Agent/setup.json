@@ -1,7 +1,7 @@
 {
-    "provider": "groq",
-    "model": "openai/gpt-oss-20b",
-    "reasoning_effort": "low",
+    "provider": "custom_provider",
+    "model": "mini-code",
+    "reasoning_effort": "medium",
     "box_color": "dark_orange",
     "box_style": "ASCII"
 }
