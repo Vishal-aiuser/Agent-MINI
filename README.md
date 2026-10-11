@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/banner.png" alt="Agent MINI Banner" width="100%" />
+</p>
+
 # 🤖 AGENT MINI
 
 <p align="center">
